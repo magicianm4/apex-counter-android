@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Apex Counter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    body { background-color: #0f172a; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes countPop {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.18); }
+      100% { transform: scale(1); }
+    }
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(37,99,235,0.4); }
+      70% { box-shadow: 0 0 0 16px rgba(37,99,235,0); }
+      100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); }
+    }
+    .fade-in-up { animation: fadeInUp 0.45s ease both; }
+    .count-pop { animation: countPop 0.25s ease; }
+    .pulse-ring { animation: pulse-ring 0.6s ease; }
+    .counter-card { transition: box-shadow 0.2s, transform 0.2s; }
+    .counter-card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(37,99,235,0.13); }
+    .btn-primary { transition: background 0.15s, transform 0.1s, box-shadow 0.15s; }
+    .btn-primary:active { transform: scale(0.96); }
+    .btn-icon { transition: background 0.15s, transform 0.1s; }
+    .btn-icon:active { transform: scale(0.92); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-900 text-white">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const STORAGE_KEY = 'apex_counters_v2';
+
+const DEFAULT_COUNTERS = [
+  { id: 1, name: 'Daily Steps Goal', value: 4823, step: 100, color: 'blue', createdAt: Date.now() - 86400000 * 3, history: [] },
+  { id: 2, name: 'Push-up Reps', value: 47, step: 1, color: 'blue', createdAt: Date.now() - 86400000 * 1, history: [] },
+  { id: 3, name: 'Water Glasses', value: 5, step: 1, color: 'blue', createdAt: Date.now() - 3600000 * 2, history: [] },
+  { id: 4, name: 'Books Read', value: 12, step: 1, color: 'blue', createdAt: Date.now() - 86400000 * 14, history: [] },
+];
+
+function formatRelativeTime(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return `${Math.floor(diff / 86400000)}d ago`;
+}
+
+function Modal({ isOpen, onClose, title, children }) {
+  useEffect(() => {
+    if (isOpen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = '';
+    return () => { document.body.style.overflow = ''; };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md shadow-2xl fade-in-up"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-700 text-white font-bold">{title}</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors btn-icon">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function CounterCard({ counter, onIncrement, onDecrement, onReset, onDelete, onEdit, animatingId }) {
+  const isAnimating = animatingId === counter.id;
+  const isNegative = counter.value < 0;
+  const isZero = counter.value === 0;
+
+  return (
+    <div className="counter-card bg-slate-800 border border-slate-700 rounded-2xl p-6 flex flex-col gap-5 fade-in-up">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-white leading-tight">{counter.name}</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Created {formatRelativeTime(counter.createdAt)}</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onEdit(counter)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-blue-400 transition-colors btn-icon"
+            title="Edit"
+          >
+            <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+          </button>
+          <button
+            onClick={() => onDelete(counter.id)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400 transition-colors btn-icon"
+            title="Delete"
+          >
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      {/* Count Display */}
+      <div className="flex items-center justify-center py-4">
+        <span
+          key={counter.value}
+          className={`text-7xl font-black tracking-tighter leading-none select-none ${isAnimating ? 'count-pop' : ''} ${isNegative ? 'text-red-400' : isZero ? 'text-slate-400' : 'text-white'}`}
+        >
+          {counter.value > 0 ? `+${counter.value.toLocaleString()}` : counter.value.toLocaleString()}
+        </span>
+      </div>
+
+      {/* Step Label */}
+      <div className="flex items-center justify-center">
+        <span className="text-xs bg-slate-700 text-slate-400 rounded-md px-2.5 py-1 font-mono">
+          step: ±{counter.step.toLocaleString()}
+        </span>
+      </div>
+
+      {/* Controls */}
+      <div className="grid grid-cols-3 gap-2">
+        <button
+          onClick={() => onDecrement(counter.id)}
+          className="btn-primary flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-blue-600 text-white font-semibold py-3 rounded-xl text-sm"
+        >
+          <i data-lucide="minus" class="w-4 h-4"></i>
+          <span>Dec</span>
+        </button>
+        <button
+          onClick={() => onReset(counter.id)}
+          className="btn-primary flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white font-semibold py-3 rounded-xl text-sm"
+        >
+          <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+          <span>Reset</span>
+        </button>
+        <button
+          onClick={() => onIncrement(counter.id)}
+          className="btn-primary flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl text-sm pulse-ring"
+        >
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>Inc</span>
+        </button>
+      </div>
+
+      {/* Mini history bar */}
+      {counter.history && counter.history.length > 0 && (
+        <div className="border-t border-slate-700 pt-3">
+          <p className="text-xs text-slate-500 mb-2 font-medium">Recent activity</p>
+          <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
+            {counter.history.slice(-5).reverse().map((entry, i) => (
+              <div key={i} className="flex items-center justify-between text-xs">
+                <span className={`font-mono font-semibold ${entry.delta > 0 ? 'text-blue-400' : entry.delta < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                  {entry.delta > 0 ? `+${entry.delta}` : entry.delta === 0 ? '↺ reset' : entry.delta}
+                </span>
+                <span className="text-slate-600">{formatRelativeTime(entry.ts)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  const [counters, setCounters] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : DEFAULT_COUNTERS;
+    } catch { return DEFAULT_COUNTERS; }
+  });
+
+  const [animatingId, setAnimatingId] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingCounter, setEditingCounter] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+
+  const [newName, setNewName] = useState('');
+  const [newStep, setNewStep] = useState('1');
+  const [newInitial, setNewInitial] = useState('0');
+  const [formError, setFormError] = useState('');
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(counters)); }
+    catch {}
+  }, [counters]);
+
+  useEffect(() => { lucide.createIcons(); });
+
+  const triggerAnim = (id) => {
+    setAnimatingId(id);
+    setTimeout(() => setAnimatingId(null), 280);
+  };
+
+  const handleIncrement = (id) => {
+    setCounters(prev => prev.map(c => c.id === id
+      ? { ...c, value: c.value + c.step, history: [...(c.history || []), { delta: c.step, ts: Date.now() }].slice(-50) }
+      : c
+    ));
+    triggerAnim(id);
+  };
+
+  const handleDecrement = (id) => {
+    setCounters(prev => prev.map(c => c.id === id
+      ? { ...c, value: c.value - c.step, history: [...(c.history || []), { delta: -c.step, ts: Date.now() }].slice(-50) }
+      : c
+    ));
+    triggerAnim(id);
+  };
+
+  const handleReset = (id) => {
+    setCounters(prev => prev.map(c => c.id === id
+      ? { ...c, value: 0, history: [...(c.history || []), { delta: 0, ts: Date.now() }].slice(-50) }
+      : c
+    ));
+    triggerAnim(id);
+  };
+
+  const handleDelete = (id) => {
+    setCounters(prev => prev.filter(c => c.id !== id));
+    setShowDeleteConfirm(null);
+  };
+
+  const openEdit = (counter) => {
+    setEditingCounter(counter);
+    setNewName(counter.name);
+    setNewStep(String(counter.step));
+    setNewInitial(String(counter.value));
+    setFormError('');
+  };
+
+  const handleSaveEdit = () => {
+    if (!newName.trim()) { setFormError('Name is required.'); return; }
+    const step = parseInt(newStep, 10);
+    const initial = parseInt(newInitial, 10);
+    if (isNaN(step) || step < 1) { setFormError('Step must be a positive integer.'); return; }
+    if (isNaN(initial)) { setFormError('Initial value must be a number.'); return; }
+    setCounters(prev => prev.map(c => c.id === editingCounter.id
+      ? { ...c, name: newName.trim(), step, value: initial }
+      : c
+    ));
+    setEditingCounter(null);
+    setFormError('');
+  };
+
+  const handleAddCounter = () => {
+    if (!newName.trim()) { setFormError('Name is required.'); return; }
+    const step = parseInt(newStep, 10);
+    const initial = parseInt(newInitial, 10);
+    if (isNaN(step) || step < 1) { setFormError('Step must be a positive integer.'); return; }
+    if (isNaN(initial)) { setFormError('Initial value must be a number.'); return; }
+    const newCounter = {
+      id: Date.now(),
+      name: newName.trim(),
+      value: initial,
+      step,
+      color: 'blue',
+      createdAt: Date.now(),
+      history: [],
+    };
+    setCounters(prev => [...prev, newCounter]);
+    setShowAddModal(false);
+    setNewName('');
+    setNewStep('1');
+    setNewInitial('0');
+    setFormError('');
+  };
+
+  const openAddModal = () => {
+    setNewName('');
+    setNewStep('1');
+    setNewInitial('0');
+    setFormError('');
+    setShowAddModal(true);
+  };
+
+  const totalValue = counters.reduce((s, c) => s + c.value, 0);
+  const highestCounter = counters.length ? counters.reduce((a, b) => a.value > b.value ? a : b) : null;
+  const totalIncrements = counters.reduce((s, c) => s + (c.history || []).filter(h => h.delta > 0).length, 0);
+
+  const FormFields = () => (
+    <div className="flex flex-col gap-4">
+      <div>
+        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Counter Name</label>
+        <input
+          type="text"
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          placeholder="e.g. Daily Coffees"
+          className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-colors"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Step Size</label>
+          <input
+            type="number"
+            value={newStep}
+            onChange={e => setNewStep(e.target.value)}
+            min="1"
+            className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-colors"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Initial Value</label>
+          <input
+            type="number"
+            value={newInitial}
+            onChange={e => setNewInitial(e.target.value)}
+            className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-colors"
+          />
+        </div>
+      </div>
+      {formError && (
+        <p className="text-xs text-red-400 bg-red-900/30 border border-red-800 rounded-lg px-3 py-2">{formError}</p>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-900 flex flex-col">
+      {/* Header */}
+      <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-40 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/40">
+              <i data-lucide="bar-chart-2" class="w-5 h-5 text-white"></i>
+            </div>
+            <div>
+              <span className="text-white font-bold text-lg tracking-tight">Apex Counter</span>
+              <span className="text-slate-500 text-xs block leading-none mt-0.5">Track anything, precisely.</span>
+            </div>
+          </div>
+          <button
+            onClick={openAddModal}
+            className="btn-primary flex items-center gap-2 bg-slate-900 border border-blue-600 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded-xl text-sm shadow-md"
+          >
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span className="hidden sm:inline">New Counter</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-10">
+        {/* Stats Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+          {[
+            { label: 'Total Counters', value: counters.length, icon: 'layers' },
+            { label: 'Combined Value', value: totalValue.toLocaleString(), icon: 'sigma' },
+            { label: 'Total Increments', value: totalIncrements, icon: 'trending-up' },
+            { label: 'Top Counter', value: highestCounter ? highestCounter.name.split(' ')[0] : '—', icon: 'award' },
+          ].map((stat, i) => (
+            <div key={i} className="bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 fade-in-up" style={{ animationDelay: `${i * 60}ms` }}>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 bg-blue-900/50 rounded-lg flex items-center justify-center">
+                  <i data-lucide={stat.icon} class="w-3.5 h-3.5 text-blue-400"></i>
+                </div>
+                <span className="text-xs text-slate-500 font-medium">{stat.label}</span>
+              </div>
+              <p className="text-2xl font-black text-white tracking-tight">{stat.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Counters Grid */}
+        {counters.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-32 text-center fade-in-up">
+            <div className="w-20 h-20 bg-slate-800 rounded-2xl flex items-center justify-center mb-6 border border-slate-700">
+              <i data-lucide="hash" class="w-10 h-10 text-slate-600"></i>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">No counters yet</h2>
+            <p className="text-slate-500 mb-8 max-w-xs text-sm">Create your first counter to start tracking anything — reps, goals, habits, you name it.</p>
+            <button
+              onClick={openAddModal}
+              className="btn-primary flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-xl text-sm shadow-lg shadow-blue-900/40"
+            >
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              Create First Counter
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+            {counters.map((counter, i) => (
+              <div key={counter.id} style={{ animationDelay: `${i * 50}ms` }}>
+                <CounterCard
+                  counter={counter}
+                  onIncrement={handleIncrement}
+                  onDecrement={handleDecrement}
+                  onReset={handleReset}
+                  onDelete={(id) => setShowDeleteConfirm(id)}
+                  onEdit={openEdit}
+                  animatingId={animatingId}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-800 py-6 mt-auto">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p className="text-slate-600 text-xs">Apex Counter — All data saved locally in your browser.</p>
+          <div className="flex items-center gap-1.5 text-xs text-slate-600">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-blue-800"></i>
+            <span>Private. No server. No tracking.</span>
+          </div>
+        </div>
+      </footer>
+
+      {/* Add Counter Modal */}
+      <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="New Counter">
+        <FormFields />
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={() => setShowAddModal(false)}
+            className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold py-2.5 rounded-xl text-sm transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleAddCounter}
+            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors shadow-lg shadow-blue-900/40"
+          >
+            Create Counter
+          </button>
+        </div>
+      </Modal>
+
+      {/* Edit Counter Modal */}
+      <Modal isOpen={!!editingCounter} onClose={() => setEditingCounter(null)} title="Edit Counter">
+        <FormFields />
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={() => setEditingCounter(null)}
+            className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold py-2.5 rounded-xl text-sm transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSaveEdit}
+            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors shadow-lg shadow-blue-900/40"
+          >
+            Save Changes
+          </button>
+        </div>
+      </Modal>
+
+      {/* Delete Confirm Modal */}
+      <Modal isOpen={!!showDeleteConfirm} onClose={() => setShowDeleteConfirm(null)} title="Delete Counter">
+        <p className="text-slate-300 text-sm mb-6">
+          This will permanently delete the counter and all its history. This action cannot be undone.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowDeleteConfirm(null)}
+            className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold py-2.5 rounded-xl text-sm transition-colors"
+          >
+            Keep It
+          </button>
+          <button
+            onClick={() => handleDelete(showDeleteConfirm)}
+            className="flex-1 bg-red-700 hover:bg-red-600 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
