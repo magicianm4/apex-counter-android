@@ -7,6 +7,7 @@ on:
       - "app/**"
       - "build.gradle"
       - "settings.gradle"
+      - "gradle.properties"
       - ".github/workflows/build-apk.yml"
   workflow_dispatch: {}
 
@@ -29,8 +30,13 @@ jobs:
         with:
           packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
 
+      - name: Setup Gradle 8.10.2 (compatible with AGP 8.7)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
       - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
+        run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: Rename APK
         run: |
