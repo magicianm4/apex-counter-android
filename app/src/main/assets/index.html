@@ -23,22 +23,27 @@
       100% { transform: scale(1); }
     }
     @keyframes pulse-ring {
-      0% { box-shadow: 0 0 0 0 rgba(37,99,235,0.4); }
-      70% { box-shadow: 0 0 0 16px rgba(37,99,235,0); }
+      0% { box-shadow: 0 0 0 0 rgba(37,99,235,0.45); }
+      70% { box-shadow: 0 0 0 14px rgba(37,99,235,0); }
       100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); }
     }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-8px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
     .fade-in-up { animation: fadeInUp 0.45s ease both; }
-    .count-pop { animation: countPop 0.25s ease; }
-    .pulse-ring { animation: pulse-ring 0.6s ease; }
+    .count-pop { animation: countPop 0.28s cubic-bezier(.36,.07,.19,.97); }
+    .pulse-ring-anim { animation: pulse-ring 0.65s ease; }
+    .slide-in { animation: slideIn 0.3s ease both; }
     .counter-card { transition: box-shadow 0.2s, transform 0.2s; }
-    .counter-card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(37,99,235,0.13); }
-    .btn-primary { transition: background 0.15s, transform 0.1s, box-shadow 0.15s; }
-    .btn-primary:active { transform: scale(0.96); }
-    .btn-icon { transition: background 0.15s, transform 0.1s; }
-    .btn-icon:active { transform: scale(0.92); }
-    ::-webkit-scrollbar { width: 6px; }
+    .counter-card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(37,99,235,0.15); }
+    .btn-transition { transition: background 0.15s, transform 0.1s, box-shadow 0.15s; }
+    .btn-transition:active { transform: scale(0.95); }
+    ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: #1e293b; }
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { opacity: 1; }
   </style>
 </head>
 <body class="min-h-screen bg-slate-900 text-white">
@@ -47,13 +52,14 @@
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 
-const STORAGE_KEY = 'apex_counters_v2';
+const STORAGE_KEY = 'apex_counters_v3';
 
 const DEFAULT_COUNTERS = [
-  { id: 1, name: 'Daily Steps Goal', value: 4823, step: 100, color: 'blue', createdAt: Date.now() - 86400000 * 3, history: [] },
-  { id: 2, name: 'Push-up Reps', value: 47, step: 1, color: 'blue', createdAt: Date.now() - 86400000 * 1, history: [] },
-  { id: 3, name: 'Water Glasses', value: 5, step: 1, color: 'blue', createdAt: Date.now() - 3600000 * 2, history: [] },
-  { id: 4, name: 'Books Read', value: 12, step: 1, color: 'blue', createdAt: Date.now() - 86400000 * 14, history: [] },
+  { id: 1, name: 'Daily Steps Goal', value: 4823, step: 100, createdAt: Date.now() - 86400000 * 3, history: [] },
+  { id: 2, name: 'Push-up Reps', value: 47, step: 1, createdAt: Date.now() - 86400000 * 1, history: [] },
+  { id: 3, name: 'Water Glasses', value: 5, step: 1, createdAt: Date.now() - 3600000 * 2, history: [] },
+  { id: 4, name: 'Books Read', value: 12, step: 1, createdAt: Date.now() - 86400000 * 14, history: [] },
+  { id: 5, name: 'Deep Work Hours', value: 3, step: 1, createdAt: Date.now() - 86400000 * 7, history: [] },
 ];
 
 function formatRelativeTime(ts) {
@@ -74,14 +80,17 @@ function Modal({ isOpen, onClose, title, children }) {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
       <div
         className="relative bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md shadow-2xl fade-in-up"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-700 text-white font-bold">{title}</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors btn-icon">
+          <h2 className="text-lg font-bold text-white">{title}</h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors btn-transition"
+          >
             <i data-lucide="x" class="w-4 h-4"></i>
           </button>
         </div>
@@ -91,31 +100,86 @@ function Modal({ isOpen, onClose, title, children }) {
   );
 }
 
+function ConfirmModal({ isOpen, onClose, onConfirm, counterName }) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
+      <div
+        className="relative bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl fade-in-up"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 bg-red-900/40 rounded-xl flex items-center justify-center flex-shrink-0">
+            <i data-lucide="trash-2" class="w-5 h-5 text-red-400"></i>
+          </div>
+          <h2 className="text-base font-bold text-white">Delete Counter?</h2>
+        </div>
+        <p className="text-sm text-slate-400 mb-5">
+          "<span className="text-white font-medium">{counterName}</span>" and all its history will be permanently removed.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 btn-transition py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:border-slate-500 hover:text-white text-sm font-semibold"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 btn-transition py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-semibold"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon, delay }) {
+  return (
+    <div
+      className="bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 fade-in-up"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-6 h-6 bg-blue-900/50 rounded-md flex items-center justify-center">
+          <i data-lucide={icon} class="w-3.5 h-3.5 text-blue-400"></i>
+        </div>
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>
+      </div>
+      <p className="text-2xl font-black text-white tracking-tight">{value}</p>
+    </div>
+  );
+}
+
 function CounterCard({ counter, onIncrement, onDecrement, onReset, onDelete, onEdit, animatingId }) {
   const isAnimating = animatingId === counter.id;
   const isNegative = counter.value < 0;
   const isZero = counter.value === 0;
+  const recentHistory = (counter.history || []).slice(-6).reverse();
 
   return (
     <div className="counter-card bg-slate-800 border border-slate-700 rounded-2xl p-6 flex flex-col gap-5 fade-in-up">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-base font-semibold text-white leading-tight">{counter.name}</h3>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-white leading-tight truncate">{counter.name}</h3>
           <p className="text-xs text-slate-500 mt-0.5">Created {formatRelativeTime(counter.createdAt)}</p>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => onEdit(counter)}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-blue-400 transition-colors btn-icon"
-            title="Edit"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-blue-400 transition-colors btn-transition"
+            title="Edit counter"
           >
             <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
           </button>
           <button
             onClick={() => onDelete(counter.id)}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400 transition-colors btn-icon"
-            title="Delete"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400 transition-colors btn-transition"
+            title="Delete counter"
           >
             <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
           </button>
@@ -123,19 +187,23 @@ function CounterCard({ counter, onIncrement, onDecrement, onReset, onDelete, onE
       </div>
 
       {/* Count Display */}
-      <div className="flex items-center justify-center py-4">
+      <div className="flex items-center justify-center py-5 bg-slate-900/50 rounded-xl">
         <span
-          key={counter.value}
-          className={`text-7xl font-black tracking-tighter leading-none select-none ${isAnimating ? 'count-pop' : ''} ${isNegative ? 'text-red-400' : isZero ? 'text-slate-400' : 'text-white'}`}
+          key={counter.value + '-' + Date.now()}
+          className={`text-7xl font-black tracking-tighter leading-none select-none ${isAnimating ? 'count-pop' : ''} ${
+            isNegative ? 'text-red-400' : isZero ? 'text-slate-500' : 'text-white'
+          }`}
         >
-          {counter.value > 0 ? `+${counter.value.toLocaleString()}` : counter.value.toLocaleString()}
+          {counter.value > 0
+            ? `+${counter.value.toLocaleString()}`
+            : counter.value.toLocaleString()}
         </span>
       </div>
 
-      {/* Step Label */}
+      {/* Step Badge */}
       <div className="flex items-center justify-center">
-        <span className="text-xs bg-slate-700 text-slate-400 rounded-md px-2.5 py-1 font-mono">
-          step: ±{counter.step.toLocaleString()}
+        <span className="text-xs bg-slate-700/60 text-slate-400 rounded-md px-2.5 py-1 font-mono border border-slate-700">
+          step ±{counter.step.toLocaleString()}
         </span>
       </div>
 
@@ -143,42 +211,95 @@ function CounterCard({ counter, onIncrement, onDecrement, onReset, onDelete, onE
       <div className="grid grid-cols-3 gap-2">
         <button
           onClick={() => onDecrement(counter.id)}
-          className="btn-primary flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-blue-600 text-white font-semibold py-3 rounded-xl text-sm"
+          className="btn-transition flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl text-sm"
         >
           <i data-lucide="minus" class="w-4 h-4"></i>
           <span>Dec</span>
         </button>
         <button
           onClick={() => onReset(counter.id)}
-          className="btn-primary flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white font-semibold py-3 rounded-xl text-sm"
+          className="btn-transition flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white font-semibold py-3 rounded-xl text-sm"
         >
           <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
           <span>Reset</span>
         </button>
         <button
           onClick={() => onIncrement(counter.id)}
-          className="btn-primary flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl text-sm pulse-ring"
+          className="btn-transition flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl text-sm"
         >
           <i data-lucide="plus" class="w-4 h-4"></i>
           <span>Inc</span>
         </button>
       </div>
 
-      {/* Mini history bar */}
-      {counter.history && counter.history.length > 0 && (
-        <div className="border-t border-slate-700 pt-3">
-          <p className="text-xs text-slate-500 mb-2 font-medium">Recent activity</p>
-          <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
-            {counter.history.slice(-5).reverse().map((entry, i) => (
-              <div key={i} className="flex items-center justify-between text-xs">
-                <span className={`font-mono font-semibold ${entry.delta > 0 ? 'text-blue-400' : entry.delta < 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                  {entry.delta > 0 ? `+${entry.delta}` : entry.delta === 0 ? '↺ reset' : entry.delta}
-                </span>
-                <span className="text-slate-600">{formatRelativeTime(entry.ts)}</span>
+      {/* Activity Feed */}
+      {recentHistory.length > 0 ? (
+        <div className="border-t border-slate-700/60 pt-4">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2.5">Recent activity</p>
+          <div className="flex flex-col gap-1.5 max-h-28 overflow-y-auto pr-1">
+            {recentHistory.map((entry, i) => (
+              <div key={i} className="flex items-center justify-between slide-in" style={{ animationDelay: `${i * 30}ms` }}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    entry.delta > 0 ? 'bg-blue-500' : entry.delta < 0 ? 'bg-red-500' : 'bg-slate-500'
+                  }`} />
+                  <span className={`text-xs font-mono font-semibold ${
+                    entry.delta > 0 ? 'text-blue-400' : entry.delta < 0 ? 'text-red-400' : 'text-slate-500'
+                  }`}>
+                    {entry.delta > 0 ? `+${entry.delta}` : entry.delta === 0 ? '↺ reset' : entry.delta}
+                  </span>
+                </div>
+                <span className="text-xs text-slate-600">{formatRelativeTime(entry.ts)}</span>
               </div>
             ))}
           </div>
         </div>
+      ) : (
+        <div className="border-t border-slate-700/60 pt-4">
+          <p className="text-xs text-slate-600 text-center">No activity yet — start counting!</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FormFields({ name, setName, step, setStep, initial, setInitial, error, autoFocusRef }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Counter Name</label>
+        <input
+          ref={autoFocusRef}
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="e.g. Daily Coffees"
+          className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-colors"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Step Size</label>
+          <input
+            type="number"
+            value={step}
+            onChange={e => setStep(e.target.value)}
+            min="1"
+            className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-colors"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Initial Value</label>
+          <input
+            type="number"
+            value={initial}
+            onChange={e => setInitial(e.target.value)}
+            className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-colors"
+          />
+        </div>
+      </div>
+      {error && (
+        <p className="text-xs text-red-400 bg-red-900/30 border border-red-800/50 rounded-lg px-3 py-2">{error}</p>
       )}
     </div>
   );
@@ -195,12 +316,15 @@ function App() {
   const [animatingId, setAnimatingId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCounter, setEditingCounter] = useState(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const [newName, setNewName] = useState('');
-  const [newStep, setNewStep] = useState('1');
-  const [newInitial, setNewInitial] = useState('0');
+  const [formName, setFormName] = useState('');
+  const [formStep, setFormStep] = useState('1');
+  const [formInitial, setFormInitial] = useState('0');
   const [formError, setFormError] = useState('');
+
+  const addInputRef = useRef(null);
+  const editInputRef = useRef(null);
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(counters)); }
@@ -209,138 +333,112 @@ function App() {
 
   useEffect(() => { lucide.createIcons(); });
 
+  useEffect(() => {
+    if (showAddModal) setTimeout(() => addInputRef.current?.focus(), 80);
+  }, [showAddModal]);
+
+  useEffect(() => {
+    if (editingCounter) setTimeout(() => editInputRef.current?.focus(), 80);
+  }, [editingCounter]);
+
   const triggerAnim = (id) => {
     setAnimatingId(id);
-    setTimeout(() => setAnimatingId(null), 280);
+    setTimeout(() => setAnimatingId(null), 300);
   };
 
   const handleIncrement = (id) => {
-    setCounters(prev => prev.map(c => c.id === id
-      ? { ...c, value: c.value + c.step, history: [...(c.history || []), { delta: c.step, ts: Date.now() }].slice(-50) }
-      : c
+    setCounters(prev => prev.map(c =>
+      c.id === id
+        ? { ...c, value: c.value + c.step, history: [...(c.history || []), { delta: c.step, ts: Date.now() }].slice(-50) }
+        : c
     ));
     triggerAnim(id);
   };
 
   const handleDecrement = (id) => {
-    setCounters(prev => prev.map(c => c.id === id
-      ? { ...c, value: c.value - c.step, history: [...(c.history || []), { delta: -c.step, ts: Date.now() }].slice(-50) }
-      : c
+    setCounters(prev => prev.map(c =>
+      c.id === id
+        ? { ...c, value: c.value - c.step, history: [...(c.history || []), { delta: -c.step, ts: Date.now() }].slice(-50) }
+        : c
     ));
     triggerAnim(id);
   };
 
   const handleReset = (id) => {
-    setCounters(prev => prev.map(c => c.id === id
-      ? { ...c, value: 0, history: [...(c.history || []), { delta: 0, ts: Date.now() }].slice(-50) }
-      : c
+    setCounters(prev => prev.map(c =>
+      c.id === id
+        ? { ...c, value: 0, history: [...(c.history || []), { delta: 0, ts: Date.now() }].slice(-50) }
+        : c
     ));
     triggerAnim(id);
   };
 
-  const handleDelete = (id) => {
-    setCounters(prev => prev.filter(c => c.id !== id));
-    setShowDeleteConfirm(null);
+  const handleDelete = () => {
+    setCounters(prev => prev.filter(c => c.id !== deleteTarget.id));
+    setDeleteTarget(null);
   };
 
   const openEdit = (counter) => {
     setEditingCounter(counter);
-    setNewName(counter.name);
-    setNewStep(String(counter.step));
-    setNewInitial(String(counter.value));
+    setFormName(counter.name);
+    setFormStep(String(counter.step));
+    setFormInitial(String(counter.value));
     setFormError('');
   };
 
+  const validateForm = () => {
+    if (!formName.trim()) { setFormError('Counter name is required.'); return false; }
+    const step = parseInt(formStep, 10);
+    const initial = parseInt(formInitial, 10);
+    if (isNaN(step) || step < 1) { setFormError('Step must be a positive whole number.'); return false; }
+    if (isNaN(initial)) { setFormError('Initial value must be a number.'); return false; }
+    return { name: formName.trim(), step, value: initial };
+  };
+
   const handleSaveEdit = () => {
-    if (!newName.trim()) { setFormError('Name is required.'); return; }
-    const step = parseInt(newStep, 10);
-    const initial = parseInt(newInitial, 10);
-    if (isNaN(step) || step < 1) { setFormError('Step must be a positive integer.'); return; }
-    if (isNaN(initial)) { setFormError('Initial value must be a number.'); return; }
-    setCounters(prev => prev.map(c => c.id === editingCounter.id
-      ? { ...c, name: newName.trim(), step, value: initial }
-      : c
+    const validated = validateForm();
+    if (!validated) return;
+    setCounters(prev => prev.map(c =>
+      c.id === editingCounter.id ? { ...c, ...validated } : c
     ));
     setEditingCounter(null);
     setFormError('');
   };
 
   const handleAddCounter = () => {
-    if (!newName.trim()) { setFormError('Name is required.'); return; }
-    const step = parseInt(newStep, 10);
-    const initial = parseInt(newInitial, 10);
-    if (isNaN(step) || step < 1) { setFormError('Step must be a positive integer.'); return; }
-    if (isNaN(initial)) { setFormError('Initial value must be a number.'); return; }
+    const validated = validateForm();
+    if (!validated) return;
     const newCounter = {
       id: Date.now(),
-      name: newName.trim(),
-      value: initial,
-      step,
-      color: 'blue',
       createdAt: Date.now(),
       history: [],
+      ...validated,
     };
     setCounters(prev => [...prev, newCounter]);
     setShowAddModal(false);
-    setNewName('');
-    setNewStep('1');
-    setNewInitial('0');
-    setFormError('');
+    resetForm();
+  };
+
+  const resetForm = () => {
+    setFormName(''); setFormStep('1'); setFormInitial('0'); setFormError('');
   };
 
   const openAddModal = () => {
-    setNewName('');
-    setNewStep('1');
-    setNewInitial('0');
-    setFormError('');
+    resetForm();
     setShowAddModal(true);
   };
 
+  // Derived stats
   const totalValue = counters.reduce((s, c) => s + c.value, 0);
-  const highestCounter = counters.length ? counters.reduce((a, b) => a.value > b.value ? a : b) : null;
   const totalIncrements = counters.reduce((s, c) => s + (c.history || []).filter(h => h.delta > 0).length, 0);
-
-  const FormFields = () => (
-    <div className="flex flex-col gap-4">
-      <div>
-        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Counter Name</label>
-        <input
-          type="text"
-          value={newName}
-          onChange={e => setNewName(e.target.value)}
-          placeholder="e.g. Daily Coffees"
-          className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-colors"
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Step Size</label>
-          <input
-            type="number"
-            value={newStep}
-            onChange={e => setNewStep(e.target.value)}
-            min="1"
-            className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-colors"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Initial Value</label>
-          <input
-            type="number"
-            value={newInitial}
-            onChange={e => setNewInitial(e.target.value)}
-            className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-colors"
-          />
-        </div>
-      </div>
-      {formError && (
-        <p className="text-xs text-red-400 bg-red-900/30 border border-red-800 rounded-lg px-3 py-2">{formError}</p>
-      )}
-    </div>
-  );
+  const totalDecrements = counters.reduce((s, c) => s + (c.history || []).filter(h => h.delta < 0).length, 0);
+  const highestCounter = counters.length
+    ? counters.reduce((a, b) => a.value > b.value ? a : b)
+    : null;
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
+
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-40 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
@@ -349,13 +447,13 @@ function App() {
               <i data-lucide="bar-chart-2" class="w-5 h-5 text-white"></i>
             </div>
             <div>
-              <span className="text-white font-bold text-lg tracking-tight">Apex Counter</span>
+              <span className="text-white font-bold text-lg tracking-tight leading-none">Apex Counter</span>
               <span className="text-slate-500 text-xs block leading-none mt-0.5">Track anything, precisely.</span>
             </div>
           </div>
           <button
             onClick={openAddModal}
-            className="btn-primary flex items-center gap-2 bg-slate-900 border border-blue-600 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded-xl text-sm shadow-md"
+            className="btn-transition flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-xl text-sm shadow-md shadow-blue-900/30"
           >
             <i data-lucide="plus" class="w-4 h-4"></i>
             <span className="hidden sm:inline">New Counter</span>
@@ -364,85 +462,121 @@ function App() {
       </header>
 
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-10">
+
+        {/* Hero line */}
+        <div className="mb-8 fade-in-up">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">Your Counters</h1>
+          <p className="text-slate-400 mt-1 text-sm">Increment, decrement, reset — with full history tracking.</p>
+        </div>
+
         {/* Stats Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
-          {[
-            { label: 'Total Counters', value: counters.length, icon: 'layers' },
-            { label: 'Combined Value', value: totalValue.toLocaleString(), icon: 'sigma' },
-            { label: 'Total Increments', value: totalIncrements, icon: 'trending-up' },
-            { label: 'Top Counter', value: highestCounter ? highestCounter.name.split(' ')[0] : '—', icon: 'award' },
-          ].map((stat, i) => (
-            <div key={i} className="bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 fade-in-up" style={{ animationDelay: `${i * 60}ms` }}>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-7 h-7 bg-blue-900/50 rounded-lg flex items-center justify-center">
-                  <i data-lucide={stat.icon} class="w-3.5 h-3.5 text-blue-400"></i>
-                </div>
-                <span className="text-xs text-slate-500 font-medium">{stat.label}</span>
-              </div>
-              <p className="text-2xl font-black text-white tracking-tight">{stat.value}</p>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+          <StatCard label="Total Counters" value={counters.length} icon="layers" delay={0} />
+          <StatCard label="Combined Value" value={totalValue.toLocaleString()} icon="sigma" delay={60} />
+          <StatCard label="Increments" value={totalIncrements} icon="trending-up" delay={120} />
+          <StatCard label="Top Counter" value={highestCounter ? highestCounter.name.split(' ')[0] : '—'} icon="award" delay={180} />
         </div>
 
         {/* Counters Grid */}
         {counters.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-32 text-center fade-in-up">
-            <div className="w-20 h-20 bg-slate-800 rounded-2xl flex items-center justify-center mb-6 border border-slate-700">
-              <i data-lucide="hash" class="w-10 h-10 text-slate-600"></i>
+          <div className="flex flex-col items-center justify-center py-24 text-center fade-in-up">
+            <div className="w-16 h-16 bg-slate-800 border border-slate-700 rounded-2xl flex items-center justify-center mb-5">
+              <i data-lucide="bar-chart-2" class="w-8 h-8 text-slate-600"></i>
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">No counters yet</h2>
-            <p className="text-slate-500 mb-8 max-w-xs text-sm">Create your first counter to start tracking anything — reps, goals, habits, you name it.</p>
+            <h2 className="text-xl font-bold text-white mb-2">No counters yet</h2>
+            <p className="text-slate-400 text-sm max-w-xs mb-6">
+              Create your first counter to start tracking anything — reps, habits, goals, anything.
+            </p>
             <button
               onClick={openAddModal}
-              className="btn-primary flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-xl text-sm shadow-lg shadow-blue-900/40"
+              className="btn-transition flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold px-5 py-2.5 rounded-xl text-sm"
             >
               <i data-lucide="plus" class="w-4 h-4"></i>
               Create First Counter
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {counters.map((counter, i) => (
-              <div key={counter.id} style={{ animationDelay: `${i * 50}ms` }}>
-                <CounterCard
-                  counter={counter}
-                  onIncrement={handleIncrement}
-                  onDecrement={handleDecrement}
-                  onReset={handleReset}
-                  onDelete={(id) => setShowDeleteConfirm(id)}
-                  onEdit={openEdit}
-                  animatingId={animatingId}
-                />
-              </div>
+              <CounterCard
+                key={counter.id}
+                counter={counter}
+                onIncrement={handleIncrement}
+                onDecrement={handleDecrement}
+                onReset={handleReset}
+                onDelete={(id) => setDeleteTarget(counters.find(c => c.id === id))}
+                onEdit={openEdit}
+                animatingId={animatingId}
+              />
             ))}
+          </div>
+        )}
+
+        {/* Quick Tips */}
+        {counters.length > 0 && (
+          <div className="mt-12 bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 fade-in-up">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-6 h-6 bg-blue-900/50 rounded-md flex items-center justify-center">
+                <i data-lucide="lightbulb" class="w-3.5 h-3.5 text-blue-400"></i>
+              </div>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Tips</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                { icon: 'pencil', tip: 'Edit any counter to rename it, change its step size, or set a specific value.' },
+                { icon: 'rotate-ccw', tip: 'Reset brings a counter back to zero — history is preserved so you can see the full record.' },
+                { icon: 'layers', tip: 'All counters persist across sessions automatically. Close and reopen anytime.' },
+              ].map((item, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-slate-700 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <i data-lucide={item.icon} class="w-3.5 h-3.5 text-slate-400"></i>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">{item.tip}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800 py-6 mt-auto">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p className="text-slate-600 text-xs">Apex Counter — All data saved locally in your browser.</p>
-          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-blue-800"></i>
-            <span>Private. No server. No tracking.</span>
+      <footer className="border-t border-slate-800 py-6 mt-4">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-blue-600 rounded-lg flex items-center justify-center">
+              <i data-lucide="bar-chart-2" class="w-3.5 h-3.5 text-white"></i>
+            </div>
+            <span className="text-sm font-semibold text-slate-500">Apex Counter</span>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-slate-600">
+            <span>{counters.length} counter{counters.length !== 1 ? 's' : ''}</span>
+            <span>·</span>
+            <span>{(totalIncrements + totalDecrements)} total actions</span>
+            <span>·</span>
+            <span>Auto-saved</span>
           </div>
         </div>
       </footer>
 
       {/* Add Counter Modal */}
-      <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="New Counter">
-        <FormFields />
-        <div className="flex gap-3 mt-6">
+      <Modal isOpen={showAddModal} onClose={() => { setShowAddModal(false); resetForm(); }} title="New Counter">
+        <FormFields
+          name={formName} setName={setFormName}
+          step={formStep} setStep={setFormStep}
+          initial={formInitial} setInitial={setFormInitial}
+          error={formError}
+          autoFocusRef={addInputRef}
+        />
+        <div className="flex gap-3 mt-5">
           <button
-            onClick={() => setShowAddModal(false)}
-            className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold py-2.5 rounded-xl text-sm transition-colors"
+            onClick={() => { setShowAddModal(false); resetForm(); }}
+            className="flex-1 btn-transition py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:border-slate-500 hover:text-white text-sm font-semibold"
           >
             Cancel
           </button>
           <button
             onClick={handleAddCounter}
-            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors shadow-lg shadow-blue-900/40"
+            className="flex-1 btn-transition py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold"
           >
             Create Counter
           </button>
@@ -450,18 +584,24 @@ function App() {
       </Modal>
 
       {/* Edit Counter Modal */}
-      <Modal isOpen={!!editingCounter} onClose={() => setEditingCounter(null)} title="Edit Counter">
-        <FormFields />
-        <div className="flex gap-3 mt-6">
+      <Modal isOpen={!!editingCounter} onClose={() => { setEditingCounter(null); setFormError(''); }} title="Edit Counter">
+        <FormFields
+          name={formName} setName={setFormName}
+          step={formStep} setStep={setFormStep}
+          initial={formInitial} setInitial={setFormInitial}
+          error={formError}
+          autoFocusRef={editInputRef}
+        />
+        <div className="flex gap-3 mt-5">
           <button
-            onClick={() => setEditingCounter(null)}
-            className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold py-2.5 rounded-xl text-sm transition-colors"
+            onClick={() => { setEditingCounter(null); setFormError(''); }}
+            className="flex-1 btn-transition py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:border-slate-500 hover:text-white text-sm font-semibold"
           >
             Cancel
           </button>
           <button
             onClick={handleSaveEdit}
-            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors shadow-lg shadow-blue-900/40"
+            className="flex-1 btn-transition py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold"
           >
             Save Changes
           </button>
@@ -469,25 +609,13 @@ function App() {
       </Modal>
 
       {/* Delete Confirm Modal */}
-      <Modal isOpen={!!showDeleteConfirm} onClose={() => setShowDeleteConfirm(null)} title="Delete Counter">
-        <p className="text-slate-300 text-sm mb-6">
-          This will permanently delete the counter and all its history. This action cannot be undone.
-        </p>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowDeleteConfirm(null)}
-            className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold py-2.5 rounded-xl text-sm transition-colors"
-          >
-            Keep It
-          </button>
-          <button
-            onClick={() => handleDelete(showDeleteConfirm)}
-            className="flex-1 bg-red-700 hover:bg-red-600 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
-          >
-            Delete
-          </button>
-        </div>
-      </Modal>
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        counterName={deleteTarget?.name}
+      />
+
     </div>
   );
 }
